@@ -56,8 +56,6 @@ void KeyboardMouseInput::Tick()
 
 void KeyboardMouseInput::EndFrame()
 {
-	// Advance previous state for next frame's edge detection.
-	// Must be called AFTER all per-frame consumers have read IsKeyPressed/Released etc.
 	memcpy(m_keyStatePrev, m_keyState, sizeof(m_keyState));
 	memcpy(m_mouseButtonsPrev, m_mouseButtons, sizeof(m_mouseButtons));
 }
@@ -138,7 +136,6 @@ void KeyboardMouseInput::ClearAllState()
 	m_scrollDeltaAccum = 0;
 }
 
-// Per-frame key queries
 bool KeyboardMouseInput::IsKeyDown(int vk) const
 {
 	if (vk < 0 || vk >= 256) return false;
@@ -157,7 +154,6 @@ bool KeyboardMouseInput::IsKeyReleased(int vk) const
 	return !m_keyState[vk] && m_keyStatePrev[vk];
 }
 
-// Per-frame mouse button queries
 bool KeyboardMouseInput::IsMouseDown(int btn) const
 {
 	if (btn < 0 || btn >= 3) return false;
@@ -176,7 +172,7 @@ bool KeyboardMouseInput::IsMouseReleased(int btn) const
 	return !m_mouseButtons[btn] && m_mouseButtonsPrev[btn];
 }
 
-// Game-tick consume methods
+// 4J-Win64: "consume" = gone forever, like my productivity
 bool KeyboardMouseInput::ConsumeKeyPress(int vk)
 {
 	if (vk < 0 || vk >= 256) return false;
@@ -216,7 +212,6 @@ int KeyboardMouseInput::ConsumeScrollDelta()
 	return delta;
 }
 
-// Mouse capture
 void KeyboardMouseInput::SetCapture(bool capture)
 {
 	if (capture == m_captured) return;
@@ -234,8 +229,6 @@ void KeyboardMouseInput::SetCapture(bool capture)
 		RECT screenRect = { topLeft.x, topLeft.y, bottomRight.x, bottomRight.y };
 		ClipCursor(&screenRect);
 		CenterCursor();
-
-		// Flush accumulated deltas so the snap-to-center doesn't cause a jump
 		m_mouseDeltaXAccum = 0.0f;
 		m_mouseDeltaYAccum = 0.0f;
 	}

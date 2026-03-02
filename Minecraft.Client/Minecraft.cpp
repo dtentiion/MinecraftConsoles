@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "Minecraft.h"
 #include "GameMode.h"
 #include "Timer.h"
@@ -1508,6 +1508,8 @@ void Minecraft::run_middle()
 						if (KMInput.ConsumeKeyPress('Q'))         localplayers[i]->ullButtonsPressed |= 1LL<<MINECRAFT_ACTION_DROP;
 						if (KMInput.ConsumeKeyPress('C'))         localplayers[i]->ullButtonsPressed |= 1LL<<MINECRAFT_ACTION_CRAFTING;
 						if (KMInput.ConsumeKeyPress(VK_F5))       localplayers[i]->ullButtonsPressed |= 1LL<<MINECRAFT_ACTION_RENDER_THIRD_PERSON;
+						if (KMInput.ConsumeKeyPress(VK_TAB))      localplayers[i]->ullButtonsPressed |= 1LL<<MINECRAFT_ACTION_GAME_INFO;
+						if (KMInput.ConsumeKeyPress('F'))          localplayers[i]->ullButtonsPressed |= 1LL<<MINECRAFT_ACTION_FLY_TOGGLE;
 						// In flying mode, Shift held = sneak/descend
 						if (localplayers[i]->abilities.flying && KMInput.IsKeyDown(VK_SHIFT))
 							localplayers[i]->ullButtonsPressed |= 1LL<<MINECRAFT_ACTION_SNEAK_TOGGLE;

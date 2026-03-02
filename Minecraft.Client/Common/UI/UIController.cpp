@@ -707,8 +707,7 @@ void UIController::handleInput()
 			handleKeyPress(iPad, key);
 		}
 
-#ifdef __PSVITA__
-		//CD - Vita requires key press 40 - select [MINECRAFT_ACTION_GAME_INFO]
+#if defined(__PSVITA__) || defined(_WINDOWS64)
 		handleKeyPress(iPad, MINECRAFT_ACTION_GAME_INFO);
 #endif
 	}
@@ -920,7 +919,6 @@ void UIController::handleKeyPress(unsigned int iPad, unsigned int key)
 	released = InputManager.ButtonReleased(iPad,key); // Toggle
 
 #ifdef _WINDOWS64
-	// Keyboard menu input for player 0
 	if (iPad == 0)
 	{
 		bool kbDown = false, kbPressed = false, kbReleased = false;
@@ -932,11 +930,12 @@ void UIController::handleKeyPress(unsigned int iPad, unsigned int key)
 			case ACTION_MENU_RIGHT:     kbDown = KMInput.IsKeyDown(VK_RIGHT);  kbPressed = KMInput.IsKeyPressed(VK_RIGHT);  kbReleased = KMInput.IsKeyReleased(VK_RIGHT);  break;
 			case ACTION_MENU_OK:        kbDown = KMInput.IsKeyDown(VK_RETURN); kbPressed = KMInput.IsKeyPressed(VK_RETURN); kbReleased = KMInput.IsKeyReleased(VK_RETURN); break;
 			case ACTION_MENU_A:         kbDown = KMInput.IsKeyDown(VK_RETURN); kbPressed = KMInput.IsKeyPressed(VK_RETURN); kbReleased = KMInput.IsKeyReleased(VK_RETURN); break;
-			case ACTION_MENU_CANCEL:    kbDown = KMInput.IsKeyDown(VK_ESCAPE); kbPressed = KMInput.IsKeyPressed(VK_ESCAPE); kbReleased = KMInput.IsKeyReleased(VK_ESCAPE); break;
-			case ACTION_MENU_B:         kbDown = KMInput.IsKeyDown(VK_ESCAPE); kbPressed = KMInput.IsKeyPressed(VK_ESCAPE); kbReleased = KMInput.IsKeyReleased(VK_ESCAPE); break;
+			case ACTION_MENU_CANCEL:    kbDown = KMInput.IsKeyDown(VK_ESCAPE) || KMInput.IsKeyDown('B'); kbPressed = KMInput.IsKeyPressed(VK_ESCAPE) || KMInput.IsKeyPressed('B'); kbReleased = KMInput.IsKeyReleased(VK_ESCAPE) || KMInput.IsKeyReleased('B'); break;
+			case ACTION_MENU_B:         kbDown = KMInput.IsKeyDown(VK_ESCAPE) || KMInput.IsKeyDown('B'); kbPressed = KMInput.IsKeyPressed(VK_ESCAPE) || KMInput.IsKeyPressed('B'); kbReleased = KMInput.IsKeyReleased(VK_ESCAPE) || KMInput.IsKeyReleased('B'); break;
 			case ACTION_MENU_PAUSEMENU: kbDown = KMInput.IsKeyDown(VK_ESCAPE); kbPressed = KMInput.IsKeyPressed(VK_ESCAPE); kbReleased = KMInput.IsKeyReleased(VK_ESCAPE); break;
 			case ACTION_MENU_LEFT_SCROLL: kbDown = KMInput.IsKeyDown('Q'); kbPressed = KMInput.IsKeyPressed('Q'); kbReleased = KMInput.IsKeyReleased('Q'); break;
 			case ACTION_MENU_RIGHT_SCROLL: kbDown = KMInput.IsKeyDown('E'); kbPressed = KMInput.IsKeyPressed('E'); kbReleased = KMInput.IsKeyReleased('E'); break;
+			case MINECRAFT_ACTION_GAME_INFO: kbDown = KMInput.IsKeyDown(VK_TAB); kbPressed = KMInput.IsKeyPressed(VK_TAB); kbReleased = KMInput.IsKeyReleased(VK_TAB); break;
 		}
 		pressed = pressed || kbPressed;
 		released = released || kbReleased;
@@ -946,26 +945,26 @@ void UIController::handleKeyPress(unsigned int iPad, unsigned int key)
 
 	if(pressed) app.DebugPrintf("Pressed %d\n",key);
 	if(released) app.DebugPrintf("Released %d\n",key);
-	// Repeat handling
-	if(pressed)
+	// Repeat handling (only for keys within the repeat timer array bounds)
+	if(key <= ACTION_MAX_MENU)
 	{
-		// Start repeat timer
-		m_actionRepeatTimer[iPad][key] = GetTickCount() + UI_REPEAT_KEY_DELAY_MS;
-	}
-	else if (released)
-	{
-		// Stop repeat timer
-		m_actionRepeatTimer[iPad][key] = 0;
-	}
-	else if (down)
-	{
-		// Check is enough time has elapsed to be a repeat key
-		DWORD currentTime = GetTickCount();
-		if(m_actionRepeatTimer[iPad][key] > 0 && currentTime > m_actionRepeatTimer[iPad][key])
+		if(pressed)
 		{
-			repeat = true;
-			pressed = true;
-			m_actionRepeatTimer[iPad][key] = currentTime + UI_REPEAT_KEY_REPEAT_RATE_MS;
+			m_actionRepeatTimer[iPad][key] = GetTickCount() + UI_REPEAT_KEY_DELAY_MS;
+		}
+		else if (released)
+		{
+			m_actionRepeatTimer[iPad][key] = 0;
+		}
+		else if (down)
+		{
+			DWORD currentTime = GetTickCount();
+			if(m_actionRepeatTimer[iPad][key] > 0 && currentTime > m_actionRepeatTimer[iPad][key])
+			{
+				repeat = true;
+				pressed = true;
+				m_actionRepeatTimer[iPad][key] = currentTime + UI_REPEAT_KEY_REPEAT_RATE_MS;
+			}
 		}
 	}
 
