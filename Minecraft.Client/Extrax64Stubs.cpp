@@ -197,15 +197,8 @@ bool IQNetPlayer::IsHost() { return this == &IQNet::m_player[0]; }
 bool IQNetPlayer::IsGuest() { return false; }
 bool IQNetPlayer::IsLocal() { return true; }
 PlayerUID IQNetPlayer::GetXuid() { return INVALID_XUID; }
-LPCWSTR IQNetPlayer::GetGamertag()
-{
-	static wchar_t tags[4][16];
-	int idx = GetUserIndex();
-	if(idx < 0 || idx >= 4) idx = 0;
-	mbstowcs(tags[idx], ProfileManager.GetGamertag(idx), 15);
-	tags[idx][15] = L'\0';
-	return tags[idx];
-}
+extern wstring g_playerName;
+LPCWSTR IQNetPlayer::GetGamertag() { return g_playerName.empty() ? L"Windows" : g_playerName.c_str(); }
 int IQNetPlayer::GetSessionIndex() { return 0; }
 bool IQNetPlayer::IsTalking() { return false; }
 bool IQNetPlayer::IsMutedByLocalUser(DWORD dwUserIndex) { return false; }
