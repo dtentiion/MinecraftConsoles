@@ -4,6 +4,7 @@
 #include "stdafx.h"
 
 #include <assert.h>
+#include <ShellScalingApi.h>
 #include "GameConfig\Minecraft.spa.h"
 #include "..\MinecraftServer.h"
 #include "..\LocalPlayer.h"
@@ -36,6 +37,7 @@
 #include "Resource.h"
 #include "..\..\Minecraft.World\compression.h"
 #include "..\..\Minecraft.World\OldChunkStorage.h"
+#include "Network\WinsockNetLayer.h"
 
 #include "Xbox/resource.h"
 
@@ -82,6 +84,11 @@ BOOL g_bWidescreen = TRUE;
 
 int g_iScreenWidth = 1920;
 int g_iScreenHeight = 1080;
+
+char g_Win64Username[17] = { 0 };
+wchar_t g_Win64UsernameW[17] = { 0 };
+UINT g_ScreenWidth = 1920;
+UINT g_ScreenHeight = 1080;
 
 // Fullscreen toggle state
 static bool g_isFullscreen = false;
@@ -402,6 +409,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		if (LOWORD(wParam) == WA_INACTIVE)
 			KMInput.SetCapture(false);
 		break;
+	case WM_SETFOCUS:
+		{
+			// Re-capture when window receives focus (e.g., after clicking on it)
+			Minecraft *pMinecraft = Minecraft::GetInstance();
+			bool shouldCapture = pMinecraft && app.GetGameStarted() && !ui.GetMenuDisplayed(0) && pMinecraft->screen == NULL;
+			if (shouldCapture)
+				KMInput.SetCapture(true);
+		}
+		break;
 	case WM_KILLFOCUS:
 		KMInput.SetCapture(false);
 		KMInput.ClearAllState();
@@ -415,7 +431,90 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			return TRUE;
 		}
 		return DefWindowProc(hWnd, message, wParam, lParam);
+	case WM_SIZE:
+	{
+		if (wParam == SIZE_MINIMIZED)
+			return 0;
 
+		UINT width = LOWORD(lParam);
+		UINT height = HIWORD(lParam);
+
+		if (width == 0 || height == 0)
+			return 0;
+
+		g_ScreenWidth = width;
+		g_ScreenHeight = height;
+
+		if (g_pSwapChain)
+		{
+			g_pImmediateContext->OMSetRenderTargets(0, 0, 0);
+			g_pImmediateContext->ClearState();
+			g_pImmediateContext->Flush();
+
+			if (g_pRenderTargetView)
+			{
+				g_pRenderTargetView->Release();
+				g_pRenderTargetView = nullptr;
+			}
+
+			if (g_pDepthStencilView)
+			{
+				g_pDepthStencilView->Release();
+				g_pDepthStencilView = nullptr;
+			}
+
+			if (g_pDepthStencilBuffer)
+			{
+				g_pDepthStencilBuffer->Release();
+				g_pDepthStencilBuffer = nullptr;
+			}
+
+			HRESULT hr = g_pSwapChain->ResizeBuffers(
+				0,
+				width,
+				height,
+				DXGI_FORMAT_UNKNOWN,
+				0
+			);
+
+			if (FAILED(hr))
+			{
+				app.DebugPrintf("ResizeBuffers Failed! HRESULT: 0x%X\n", hr);
+				return 0;
+			}
+
+			ID3D11Texture2D* pBackBuffer = nullptr;
+			g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&pBackBuffer);
+
+			g_pd3dDevice->CreateRenderTargetView(pBackBuffer, NULL, &g_pRenderTargetView);
+			pBackBuffer->Release();
+
+			D3D11_TEXTURE2D_DESC descDepth = {};
+			descDepth.Width = width;
+			descDepth.Height = height;
+			descDepth.MipLevels = 1;
+			descDepth.ArraySize = 1;
+			descDepth.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+			descDepth.SampleDesc.Count = 1;
+			descDepth.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+
+			g_pd3dDevice->CreateTexture2D(&descDepth, NULL, &g_pDepthStencilBuffer);
+			g_pd3dDevice->CreateDepthStencilView(g_pDepthStencilBuffer, NULL, &g_pDepthStencilView);
+
+			g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
+
+			D3D11_VIEWPORT vp = {};
+			vp.Width = (FLOAT)width;
+			vp.Height = (FLOAT)height;
+			vp.MinDepth = 0.0f;
+			vp.MaxDepth = 1.0f;
+			vp.TopLeftX = 0;
+			vp.TopLeftY = 0;
+
+			g_pImmediateContext->RSSetViewports(1, &vp);
+		}
+	}
+	break;
 	default:
 		return DefWindowProc(hWnd, message, wParam, lParam);
 	}
@@ -443,7 +542,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
 	wcex.lpszMenuName	= "Minecraft";
 	wcex.lpszClassName	= "MinecraftClass";
-	wcex.hIconSm		= LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
+	wcex.hIconSm		= LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_MINECRAFTWINDOWS));
 
 	return RegisterClassEx(&wcex);
 }
@@ -706,7 +805,19 @@ void CleanupDevice()
 	if( g_pd3dDevice ) g_pd3dDevice->Release();
 }
 
+typedef HRESULT(__stdcall* SetProcessDpiAwareness_f)(PROCESS_DPI_AWARENESS);
+static HRESULT dyn_SetProcessDpiAwareness(PROCESS_DPI_AWARENESS value) 
+{
+  static const auto ptr = reinterpret_cast<SetProcessDpiAwareness_f>(
+      reinterpret_cast<void*>(::GetProcAddress(static_cast<HMODULE>(LoadLibraryExW(L"Shcore.dll", nullptr, 0)), "SetProcessDpiAwareness")));
+  if (ptr == nullptr) 
+  {
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return E_NOTIMPL;
+  }
 
+  return ptr(value);
+}
 
 int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 					   _In_opt_ HINSTANCE hPrevInstance,
@@ -728,12 +839,6 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	SetProcessDPIAware();
 	g_iScreenWidth = GetSystemMetrics(SM_CXSCREEN);
 	g_iScreenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-	{
-		char buf[128];
-		sprintf(buf, "Screen resolution: %dx%d\n", g_iScreenWidth, g_iScreenHeight);
-		OutputDebugStringA(buf);
-	}
 
 	if(lpCmdLine)
 	{
@@ -757,8 +862,41 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 			//g_iScreenWidth = 960;
 			//g_iScreenHeight = 544;
 		}
+
+		char cmdLineA[1024];
+		strncpy_s(cmdLineA, sizeof(cmdLineA), lpCmdLine, _TRUNCATE);
+
+		char* nameArg = strstr(cmdLineA, "-name ");
+		if (nameArg)
+		{
+			nameArg += 6;
+			while (*nameArg == ' ') nameArg++;
+			char nameBuf[17];
+			int n = 0;
+			while (nameArg[n] && nameArg[n] != ' ' && n < 16) { nameBuf[n] = nameArg[n]; n++; }
+			nameBuf[n] = 0;
+			strncpy_s(g_Win64Username, 17, nameBuf, _TRUNCATE);
+		}
 	}
 
+	if (g_Win64Username[0] == 0)
+	{
+		DWORD sz = 17;
+		static bool seeded = false;
+		if (!seeded)
+		{
+			seeded = true;
+			srand((unsigned int)time(NULL));
+		}
+
+		int r = rand() % 10000; // 0�9999
+
+		snprintf(g_Win64Username, 17, "Player%04d", r);
+
+		g_Win64Username[16] = 0;
+	}
+
+	MultiByteToWideChar(CP_ACP, 0, g_Win64Username, -1, g_Win64UsernameW, 17);
 
 	// Initialize global strings
 	MyRegisterClass(hInstance);
@@ -924,7 +1062,17 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	// ProfileManager for XN_LIVE_INVITE_ACCEPTED for QNet.
 	g_NetworkManager.Initialise();
 
+	for (int i = 0; i < MINECRAFT_NET_MAX_PLAYERS; i++)
+	{
+		IQNet::m_player[i].m_smallId = (BYTE)i;
+		IQNet::m_player[i].m_isRemote = false;
+		IQNet::m_player[i].m_isHostPlayer = (i == 0);
+		swprintf_s(IQNet::m_player[i].m_gamertag, 32, L"Player%d", i);
+	}
+	extern wchar_t g_Win64UsernameW[17];
+	wcscpy_s(IQNet::m_player[0].m_gamertag, 32, g_Win64UsernameW);
 
+	WinsockNetLayer::Initialize();
 
 	// 4J-PB moved further down
 	//app.InitGameSettings();
@@ -1096,7 +1244,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		PIXEndNamedEvent();
 
 		PIXBeginNamedEvent(0,"Network manager do work #1");
-		//		g_NetworkManager.DoWork();
+		g_NetworkManager.DoWork();
 		PIXEndNamedEvent();
 
 		//		LeaderboardManager::Instance()->Tick();
@@ -1241,6 +1389,45 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		{
 			ToggleFullscreen();
 		}
+
+		// TAB opens game info menu. - Vvis :3 - Updated by detectiveren
+		if (KMInput.IsKeyPressed(VK_TAB) && !ui.GetMenuDisplayed(0))
+		{
+			if (Minecraft* pMinecraft = Minecraft::GetInstance())
+			{
+				{
+					ui.NavigateToScene(0, eUIScene_InGameInfoMenu);
+					
+				}
+			}
+		}
+
+#ifdef _DEBUG_MENUS_ENABLED
+		// F3 toggles onscreen debug info
+		if (KMInput.IsKeyPressed(VK_F3))
+		{
+			if (Minecraft* pMinecraft = Minecraft::GetInstance())
+			{
+				if (pMinecraft->options && app.DebugSettingsOn())
+				{
+					pMinecraft->options->renderDebug = !pMinecraft->options->renderDebug;
+				}
+			}
+		}
+
+		// F4 opens debug overlay
+		if (KMInput.IsKeyPressed(VK_F4))
+		{
+			if (Minecraft* pMinecraft = Minecraft::GetInstance())
+			{
+				if (pMinecraft->options && app.DebugSettingsOn() && 
+					app.GetGameStarted() && !ui.GetMenuDisplayed(0) && pMinecraft->screen == NULL)
+				{
+					ui.NavigateToScene(0, eUIScene_DebugOverlay, NULL, eUILayer_Debug);
+				}
+			}
+		}
+#endif
 
 #if 0
 		// has the game defined profile data been changed (by a profile load)

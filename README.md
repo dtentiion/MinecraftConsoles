@@ -2,11 +2,18 @@
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/5CSzhc9t)
 
-![img.png](.github/IMG_8725.png)
+![Tutorial World](.github/TutorialWorld.png)
 
 ## Introduction
 
-This project contains the source code of Minecraft Legacy Console Edition v1.3.0494.0, with some fixes and improvements applied.
+This project contains the source code of Minecraft Legacy Console Edition v1.6.0560.0 (TU19) from https://archive.org/details/minecraft-legacy-console-edition-source-code, with some fixes and improvements applied
+
+[Nightly Build](https://github.com/smartcmd/MinecraftConsoles/releases/tag/nightly)
+
+## Platform Support
+
+- **Windows**: Supported for building and running the project
+- **macOS / Linux**: The Windows nightly build may run through Wine or CrossOver based on community reports, but this is unofficial and not currently tested by the maintainers
 
 ## Features
 
@@ -14,8 +21,9 @@ This project contains the source code of Minecraft Legacy Console Edition v1.3.0
 - Added support for keyboard and mouse input
 - Added fullscreen mode support (toggle using F11)
 - Disabled V-Sync for better performance
-- Auto-detect native monitor resolution with DPI awareness, resulting in sharper visuals on high-resolution displays
-- Full support for keyboard and mouse input
+- Added a high-resolution timer path on Windows for smoother high-FPS gameplay timing
+- Device's screen resolution will be used as the game resolution instead of using a fixed resolution (1920x1080)
+- LAN Multiplayer & Discovery based on https://github.com/LCEMP/LCEMP/
 
 ## Controls (Keyboard & Mouse)
 
@@ -33,6 +41,10 @@ This project contains the source code of Minecraft Legacy Console Edition v1.3.0
 - **Attack / Destroy**: `Left Click`
 - **Use / Place**: `Right Click`
 - **Select Item**: `Mouse Wheel` or keys `1` to `9`
+- **Accept or Decline Tutorial hints**: `Enter` to accept and `B` to decline
+- **Game Info (Player list and Host Options)**: `TAB`
+- **Toggle Debug Info**: `F3`
+- **Open Debug Overlay**: `F4`
 
 ## Build & Run
 
@@ -49,7 +61,12 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Debug --target MinecraftClient
 ```
 
+For more information, see [COMPILE.md](COMPILE.md)
+
 ## Known Issues
 
-- Builds for other platforms have not been tested and are most likely non-functional
-- There are some render bugs in the Release mode build
+- Native builds for platforms other than Windows have not been tested and are most likely non-functional. The Windows nightly build may still run on macOS and Linux through Wine or CrossOver, but that path is unofficial and not currently supported
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=smartcmd/MinecraftConsoles&type=date&legend=top-left)](https://www.star-history.com/?spm=a2c6h.12873639.article-detail.7.7b9d7fabjNxTRk#smartcmd/MinecraftConsoles&type=date&legend=top-left)
