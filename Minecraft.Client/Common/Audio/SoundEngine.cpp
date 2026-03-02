@@ -403,6 +403,9 @@ void SoundEngine::SetStreamingSounds(int iOverworldMin, int iOverWorldMax, int i
 // AP - moved to a separate function so it can be called from the mixer callback on Vita
 void SoundEngine::updateMiles()
 {
+#ifndef __DISABLE_MILES__
+	if (m_hDriver == NULL) return;
+#endif
 #ifdef __PSVITA__ 
 	//CD - We must check for Background Music [BGM] at any point
 	//If it's playing disable our audio, otherwise enable
@@ -734,7 +737,18 @@ SoundEngine::SoundEngine()
 #endif
 }
 
-void SoundEngine::destroy() {}
+void SoundEngine::destroy()
+{
+#ifndef __DISABLE_MILES__
+	if (m_hDriver)
+	{
+		AIL_shutdown_event_system();
+		AIL_close_digital_driver(m_hDriver);
+		m_hDriver = NULL;
+	}
+	AIL_shutdown();
+#endif
+}
 
 #ifdef _DEBUG
 void SoundEngine::GetSoundName(char *szSoundName,int iSound)
@@ -1128,6 +1142,8 @@ int SoundEngine::OpenStreamThreadProc( void* lpParameter )
 	return 0;
 #endif
 	SoundEngine *soundEngine = (SoundEngine *)lpParameter;
+	if (soundEngine->m_hDriver == NULL)
+		return 0;
 	soundEngine->m_hStream = AIL_open_stream(soundEngine->m_hDriver,soundEngine->m_szStreamName,0);
 	return 0;
 }
