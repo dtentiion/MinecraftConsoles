@@ -2251,6 +2251,31 @@ void UIScene_LoadOrJoinMenu::LoadSaveFromCloud()
 
 #endif //SONY_REMOTE_STORAGE_DOWNLOAD
 
+#ifdef _WINDOWS64
+static bool Win64_DeleteSaveDirectory(const wchar_t* wPath)
+{
+    wchar_t wSearch[MAX_PATH];
+    swprintf_s(wSearch, MAX_PATH, L"%s\\*", wPath);
+    WIN32_FIND_DATAW fd;
+    HANDLE hFind = FindFirstFileW(wSearch, &fd);
+    if (hFind != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+            wchar_t wChild[MAX_PATH];
+            swprintf_s(wChild, MAX_PATH, L"%s\\%s", wPath, fd.cFileName);
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                Win64_DeleteSaveDirectory(wChild);
+            else
+                DeleteFileW(wChild);
+        } while (FindNextFileW(hFind, &fd));
+        FindClose(hFind);
+    }
+    return RemoveDirectoryW(wPath) != 0;
+}
+#endif // _WINDOWS64
+
 int UIScene_LoadOrJoinMenu::DeleteSaveDialogReturned(void *pParam,int iPad,C4JStorage::EMessageResult result)
 {
     UIScene_LoadOrJoinMenu* pClass = (UIScene_LoadOrJoinMenu*)pParam;
@@ -2267,7 +2292,24 @@ int UIScene_LoadOrJoinMenu::DeleteSaveDialogReturned(void *pParam,int iPad,C4JSt
         }
         else
         {
+#ifdef _WINDOWS64
+            {
+                // Use m_saveDetails (sorted display order) so the correct folder is targeted
+                int displayIdx = pClass->m_iSaveListIndex - pClass->m_iDefaultButtonsC;
+                bool bSuccess = false;
+                if (pClass->m_saveDetails && displayIdx >= 0 && pClass->m_saveDetails[displayIdx].UTF8SaveFilename[0])
+                {
+                    wchar_t wFilename[MAX_SAVEFILENAME_LENGTH] = {};
+                    mbstowcs_s(NULL, wFilename, MAX_SAVEFILENAME_LENGTH, pClass->m_saveDetails[displayIdx].UTF8SaveFilename, MAX_SAVEFILENAME_LENGTH - 1);
+                    wchar_t wFolderPath[MAX_PATH] = {};
+                    swprintf_s(wFolderPath, MAX_PATH, L"Windows64\\GameHDD\\%s", wFilename);
+                    bSuccess = Win64_DeleteSaveDirectory(wFolderPath);
+                }
+                UIScene_LoadOrJoinMenu::DeleteSaveDataReturned((LPVOID)pClass->GetCallbackUniqueId(), bSuccess);
+            }
+#else
 			StorageManager.DeleteSaveData(&pClass->m_pSaveDetails->SaveInfoA[pClass->m_iSaveListIndex - pClass->m_iDefaultButtonsC], UIScene_LoadOrJoinMenu::DeleteSaveDataReturned, (LPVOID)pClass->GetCallbackUniqueId());
+#endif
             pClass->m_controlSavesTimer.setVisible( true );
         }
     }
